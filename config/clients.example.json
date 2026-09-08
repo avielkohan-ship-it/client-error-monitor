@@ -1,0 +1,16 @@
+{
+  "_comment": "Copy this file to clients.json and fill in each client's real endpoints. One entry per client/source.",
+  "clients": [
+    {
+      "id": "example-clinic",
+      "displayName": "Example Clinic",
+      "bookingSource": "opendental",
+      "bookingRetryUrl": "https://example-clinic.example.com/api/bookings",
+      "bookingRetryHeaders": {
+        "Authorization": "Bearer REPLACE_ME"
+      },
+      "callCallbackUrl": "https://example-clinic.example.com/api/voice/callback",
+      "callCallbackHeaders": {}
+    }
+  ]
+}

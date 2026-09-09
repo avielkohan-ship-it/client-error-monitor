@@ -4,6 +4,7 @@ const BAD_END_REASONS = new Set([
   "hangup_abrupt",
   "silence_timeout",
   "error",
+  "no_answer",
 ]);
 
 const MIN_HEALTHY_CALL_SECONDS = 5;

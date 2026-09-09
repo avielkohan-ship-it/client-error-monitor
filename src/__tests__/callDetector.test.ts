@@ -22,6 +22,11 @@ describe("detectCallError", () => {
     expect(result.isError).toBe(true);
   });
 
+  it("flags a call nobody answered", () => {
+    const result = detectCallError({ ...base, endReason: "no_answer", durationSeconds: 0 });
+    expect(result.isError).toBe(true);
+  });
+
   it("flags a suspiciously short completed call", () => {
     const result = detectCallError({ ...base, durationSeconds: 2 });
     expect(result.isError).toBe(true);

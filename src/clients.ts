@@ -10,6 +10,10 @@ export interface ClientConfig {
   bookingRetryHeaders?: Record<string, string>;
   callCallbackUrl?: string;
   callCallbackHeaders?: Record<string, string>;
+  /** Secret configured on this practice's Cal.com webhook (Settings > Webhooks). */
+  calcomWebhookSecret?: string;
+  /** Secret used to verify this practice's Retell AI webhook signature. */
+  retellWebhookSecret?: string;
 }
 
 const CONFIG_PATH = path.resolve(process.cwd(), "config/clients.json");

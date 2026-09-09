@@ -5,10 +5,12 @@ them automatically, and texts/pushes you when something needs attention.
 
 ## What it detects
 
-- **Failed bookings** — from booking systems like Carl.com or Open Dental:
-  an explicit failure, or a "success" with no confirmed time.
-- **Bad call endings** — abrupt hangups, silence timeouts, call errors, or a
-  "completed" call that was suspiciously short.
+- **Failed bookings** — from Cal.com (cancellations, rejections, failed
+  payments, no-shows) or Open Dental: an explicit failure, or a "success"
+  with no confirmed time.
+- **Bad call endings** — from a Retell AI voice agent: abrupt hangups, no
+  answers, silence timeouts, call errors, or a "completed" call that was
+  suspiciously short.
 
 ## What it does about it
 
@@ -17,9 +19,9 @@ them automatically, and texts/pushes you when something needs attention.
 2. **Auto-fix** — if the client has a retry endpoint configured
    (`config/clients.json`), the service retries the booking or requests a
    callback, with exponential backoff (`src/autofix/`).
-3. **Notify** — you get a text (Twilio) and/or a push notification (ntfy.sh)
-   either way, saying whether the auto-fix worked or a human needs to step in
-   (`src/notify/`).
+3. **Notify** — you get a push notification (ntfy.sh, no account needed)
+   and/or a text (Twilio, if you set one up) either way, saying whether the
+   auto-fix worked or a human needs to step in (`src/notify/`).
 4. **Log** — every error and its outcome is stored in `data/errors.json` and
    viewable at `GET /errors`.
 
@@ -34,33 +36,70 @@ npm run dev
 
 ### Notifications
 
-- **SMS**: create a Twilio account, buy a number, and set
-  `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, and
-  `NOTIFY_PHONE_NUMBER` (your phone, in E.164 format like `+15551234567`).
-- **Push**: no account needed. Pick a unique topic name, e.g.
+- **Push (recommended, no account needed)**: pick a unique topic name, e.g.
   `aviel-client-errors-8k2j`, subscribe to it in the
   [ntfy app](https://ntfy.sh/) (iOS/Android/web), and set `NTFY_TOPIC` to
-  that name.
+  that name in `.env`.
+- **SMS (optional)**: only if you set up your *own* Twilio account (this is
+  separate from the Twilio number Retell AI uses for your voice agent — that
+  number can't be reused to text you). Create a Twilio account, buy a
+  number, and set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
+  `TWILIO_FROM_NUMBER`, and `NOTIFY_PHONE_NUMBER` (your phone, in E.164
+  format like `+15551234567`).
 
 Either channel can be left blank to disable it; the other still fires.
 
-### Per-client auto-fix config
+### Per-client config
 
 Edit `config/clients.json` (gitignored — copy it from the `.example` file).
-Each client needs an `id` that matches the `clientId` your booking/voice
-system sends in its webhook, plus whichever of these it has:
+One entry per practice, keyed by an `id` you choose (used in the webhook
+URLs below):
 
+- `calcomWebhookSecret` — the signing secret you set on this practice's
+  Cal.com webhook.
+- `retellWebhookSecret` — the signing secret for this practice's Retell
+  agent's webhook.
 - `bookingRetryUrl` / `bookingRetryHeaders` — where to re-POST a failed
-  booking.
+  booking to auto-fix it (optional).
 - `callCallbackUrl` / `callCallbackHeaders` — where to request an outbound
-  callback after a bad call.
+  callback after a bad call, to auto-fix it (optional).
 
-A client with neither configured still gets detected and notified — it just
-skips the auto-fix step.
+A client missing the retry/callback URLs still gets detected and notified —
+it just skips the auto-fix step for that error type.
 
-## Wiring up your sources
+## Wiring up Cal.com (per practice)
 
-Point your booking system / voice platform's webhooks at:
+For each practice's Cal.com account:
+
+1. Go to **Settings → Developer → Webhooks → Add**.
+2. Subscription URL: `https://<your-deployment>/webhooks/calcom/<clientId>`
+   (use the same `id` you gave this practice in `config/clients.json`).
+3. Pick events: at minimum **Booking Cancelled**, **Booking Rejected**,
+   **Booking Payment Initiated**, **Booking No-Show Updated**.
+4. Set a secret, and copy the same value into that client's
+   `calcomWebhookSecret` in `config/clients.json`.
+
+Cal.com's exact webhook payload can vary by plan/version — `src/adapters/calcom.ts`
+documents the shape it expects. If a real payload doesn't match (check the
+webhook's delivery log in Cal.com for a sample), adjust that file.
+
+## Wiring up Retell AI (per practice)
+
+For each practice's Retell agent:
+
+1. In the Retell dashboard, set the agent's **Webhook URL** to
+   `https://<your-deployment>/webhooks/retell/<clientId>`.
+2. Copy the agent's webhook signing secret into that client's
+   `retellWebhookSecret` in `config/clients.json`.
+
+`src/adapters/retell.ts` maps Retell's `disconnection_reason` values (e.g.
+`dial_no_answer`, `dial_busy`, `error_no_audio_received`) to this service's
+error categories. If Retell's actual payload differs from what's documented
+there (check Retell's webhook logs for a sample), adjust the mapping.
+
+## Other sources (Open Dental, etc.)
+
+The generic endpoints still work for any source that isn't Cal.com/Retell:
 
 - `POST /webhooks/booking`
   ```json
@@ -83,12 +122,14 @@ Point your booking system / voice platform's webhooks at:
   }
   ```
 
-If Carl.com / Open Dental / your voice platform send a different payload
-shape, add a small translator in front of these routes (or extend
-`src/routes/webhooks.ts`) rather than changing the webhook contract.
+If a source sends a different payload shape, write a small adapter for it
+under `src/adapters/` (following `calcom.ts`/`retell.ts` as examples) rather
+than changing these generic routes.
 
-Set `WEBHOOK_SECRET` and require it as the `X-Webhook-Secret` header if
-these endpoints are reachable from the public internet.
+Set `WEBHOOK_SECRET` and require it as the `X-Webhook-Secret` header on the
+generic routes if they're reachable from the public internet. The
+Cal.com/Retell routes are authenticated per-client via their own signature
+instead.
 
 ## Viewing errors
 
